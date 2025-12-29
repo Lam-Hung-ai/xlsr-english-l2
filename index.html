@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI English Pronunciation Coach</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .phoneme-card { transition: all 0.2s; }
+        .correct { background-color: #dcfce7; color: #166534; border-color: #bbf7d0; }
+        .wrong { background-color: #fee2e2; color: #991b1b; border-color: #fecaca; }
+        .missing { background-color: #fef9c3; color: #854d0e; border-color: #fef08a; }
+        .wave-bar { transition: height 0.1s ease; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-4xl mx-auto">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-bold text-slate-800 mb-2">AI English Coach <span class="text-blue-600">MDD</span></h1>
+            <p class="text-slate-500">Môi trường: <span id="env-status" class="text-green-600 font-bold">Localhost/Secure</span></p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="md:col-span-2 space-y-6">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex justify-between items-center mb-4">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Câu mẫu</span>
+                        <button onclick="getNewSample()" class="text-blue-600 hover:text-blue-700 font-medium text-sm">
+                            <i class="fas fa-redo-alt mr-1"></i> Đổi câu khác
+                        </button>
+                    </div>
+                    <h2 id="target-text" class="text-2xl font-bold text-slate-800 mb-2">Đang tải...</h2>
+                    <p id="target-ipa" class="text-lg text-blue-500 font-mono">/---/</p>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center">
+                    <div id="visualizer" class="h-16 flex items-center justify-center gap-1 mb-6"></div>
+                    <div class="flex justify-center gap-4">
+                        <button id="record-btn" onclick="toggleRecording()" class="w-16 h-16 rounded-full bg-red-500 text-white shadow-lg flex items-center justify-center transition-all">
+                            <i id="record-icon" class="fas fa-microphone text-xl"></i>
+                        </button>
+                        <button id="play-btn" onclick="playRecording()" disabled class="w-16 h-16 rounded-full bg-slate-100 text-slate-400 border flex items-center justify-center transition-all cursor-not-allowed">
+                            <i class="fas fa-play text-xl"></i>
+                        </button>
+                    </div>
+                    <button id="analyze-btn" onclick="sendToAnalyze()" disabled class="mt-8 w-full py-3 bg-blue-600 text-white rounded-xl font-semibold shadow-lg disabled:opacity-50 hover:bg-blue-700 transition-all">
+                        Phân tích phát âm ngay
+                    </button>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-6 block">Kết quả</span>
+                    <div id="score-container" class="hidden text-center">
+                        <div class="relative inline-block mb-4">
+                            <svg class="w-32 h-32">
+                                <circle class="text-slate-100" stroke-width="8" stroke="currentColor" fill="transparent" r="58" cx="64" cy="64"/>
+                                <circle id="score-circle" class="text-blue-600" stroke-width="8" stroke-dasharray="364.4" stroke-dashoffset="364.4" stroke-linecap="round" stroke="currentColor" fill="transparent" r="58" cx="64" cy="64"/>
+                            </svg>
+                            <span id="score-text" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-3xl font-bold text-slate-800">0%</span>
+                        </div>
+                    </div>
+                    <div id="diagnosis-list" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let audioBlob;
+        let currentTargetIPA = "";
+        let visualizerInterval;
+        const API_BASE = ""; // Để trống nếu chạy chung server FastAPI
+
+        // 1. Lấy mẫu câu
+        async function getNewSample() {
+            try {
+                const res = await fetch(`${API_BASE}/get-sample`);
+                const data = await res.json();
+                document.getElementById('target-text').innerText = data.text;
+                document.getElementById('target-ipa').innerText = `/${data.ipa_target}/`;
+                currentTargetIPA = data.ipa_target;
+                resetUI();
+            } catch (e) {
+                console.error("Lỗi kết nối API:", e);
+                alert("Không thể kết nối Backend!");
+            }
+        }
+
+        // 2. Ghi âm
+        async function toggleRecording() {
+            const btn = document.getElementById('record-btn');
+            const icon = document.getElementById('record-icon');
+
+            if (!mediaRecorder || mediaRecorder.state === "inactive") {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    
+                    mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                        document.getElementById('play-btn').disabled = false;
+                        document.getElementById('play-btn').classList.remove('bg-slate-100', 'text-slate-400');
+                        document.getElementById('play-btn').classList.add('bg-blue-100', 'text-blue-600');
+                        document.getElementById('analyze-btn').disabled = false;
+                        clearInterval(visualizerInterval);
+                    };
+
+                    mediaRecorder.start();
+                    icon.classList.replace('fa-microphone', 'fa-stop');
+                    btn.classList.add('animate-pulse', 'bg-red-700');
+                    startVisualizer();
+                } catch (err) {
+                    alert("Lỗi Micro: Hãy dùng localhost hoặc HTTPS!");
+                }
+            } else {
+                mediaRecorder.stop();
+                icon.classList.replace('fa-stop', 'fa-microphone');
+                btn.classList.remove('animate-pulse', 'bg-red-700');
+            }
+        }
+
+        // 3. Phát lại
+        function playRecording() {
+            if (audioBlob) {
+                const url = URL.createObjectURL(audioBlob);
+                const audio = new Audio(url);
+                audio.play();
+            }
+        }
+
+        // 4. Phân tích
+        async function sendToAnalyze() {
+            const btn = document.getElementById('analyze-btn');
+            btn.innerText = "Đang xử lý AI...";
+            btn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('audio_file', audioBlob, 'record.wav');
+            formData.append('target_ipa', currentTargetIPA);
+
+            try {
+                const res = await fetch(`${API_BASE}/analyze`, { method: 'POST', body: formData });
+                const data = await res.json();
+                displayResults(data);
+            } catch (e) {
+                alert("Lỗi phân tích dữ liệu!");
+            } finally {
+                btn.innerText = "Phân tích phát âm ngay";
+                btn.disabled = false;
+            }
+        }
+
+        // 5. Hiển thị
+        function displayResults(data) {
+            document.getElementById('score-container').classList.remove('hidden');
+            document.getElementById('score-text').innerText = `${Math.round(data.score)}%`;
+            const offset = 364.4 - (364.4 * data.score / 100);
+            document.getElementById('score-circle').style.strokeDashoffset = offset;
+
+            const list = document.getElementById('diagnosis-list');
+            list.innerHTML = "";
+            data.diagnosis.forEach(item => {
+                let statusClass = "correct";
+                let icon = "check-circle";
+                if (item.s === "Substitution") { statusClass = "wrong"; icon = "times-circle"; }
+                if (item.s === "Deletion") { statusClass = "missing"; icon = "minus-circle"; }
+                if (item.s === "Insertion") { statusClass = "wrong"; icon = "plus-circle"; }
+
+                list.insertAdjacentHTML('beforeend', `
+                    <div class="phoneme-card ${statusClass} p-3 rounded-xl border flex justify-between items-center shadow-sm">
+                        <div class="flex flex-col">
+                            <span class="text-[10px] font-bold opacity-60 uppercase">Chuẩn: ${item.t}</span>
+                            <span class="text-lg font-mono font-bold">${item.u === '-' ? 'Ø' : item.u}</span>
+                        </div>
+                        <i class="fas fa-${icon}"></i>
+                    </div>
+                `);
+            });
+        }
+
+        function resetUI() {
+            document.getElementById('score-container').classList.add('hidden');
+            document.getElementById('diagnosis-list').innerHTML = "";
+            document.getElementById('play-btn').disabled = true;
+            document.getElementById('play-btn').classList.add('bg-slate-100', 'text-slate-400');
+            document.getElementById('analyze-btn').disabled = true;
+            const container = document.getElementById('visualizer');
+            container.innerHTML = "";
+        }
+
+        function startVisualizer() {
+            const container = document.getElementById('visualizer');
+            container.innerHTML = "";
+            for(let i=0; i<20; i++) container.innerHTML += `<div class="wave-bar w-1 bg-blue-400 rounded-full h-2"></div>`;
+            const bars = document.querySelectorAll('.wave-bar');
+            visualizerInterval = setInterval(() => {
+                bars.forEach(b => b.style.height = `${Math.random() * 40 + 8}px`);
+            }, 100);
+        }
+
+        window.onload = getNewSample;
+    </script>
+</body>
+</html>
