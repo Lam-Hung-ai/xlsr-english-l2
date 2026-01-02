@@ -29,8 +29,8 @@ ml_models = {}
 async def lifespan(app: FastAPI):
     print(f"[*] Đang tải mô hình {MODEL_ID} lên {device}...")
     try:
-        ml_models["processor"] = AutoProcessor.from_pretrained(MODEL_ID, local_files_only=True)
-        ml_models["model"] = AutoModelForCTC.from_pretrained(MODEL_ID, local_files_only=True).to(device)
+        ml_models["processor"] = AutoProcessor.from_pretrained(MODEL_ID)
+        ml_models["model"] = AutoModelForCTC.from_pretrained(MODEL_ID).to(device)
         ml_models["g2p"] = G2p()
 
         # Kiểm tra file sentences.txt an toàn
