@@ -96,7 +96,7 @@ async def analyze(audio_file: UploadFile = File(...), target_ipa: str = Form(...
         y, sr = librosa.load(temp_path, sr=SAMPLING_RATE)
         if len(y) == 0:
             raise HTTPException(status_code=400, detail="Audio trống hoặc không thể đọc được")
-            
+
         y, _ = librosa.effects.trim(y) # Bỏ khoảng lặng đầu/cuối
 
         # 3. AI Inference
@@ -111,7 +111,7 @@ async def analyze(audio_file: UploadFile = File(...), target_ipa: str = Form(...
         predicted_text = ml_models["processor"].batch_decode(predicted_ids)[0].lower()
 
         # 4. CHỐT CHẶN QUAN TRỌNG: Chuyển Text nhận diện được sang IPA
-        # Nếu model của bạn output thẳng IPA thì bỏ qua bước này. 
+        # Nếu model của bạn output thẳng IPA thì bỏ qua bước này.
         # Nhưng đa số model XLSR English output ra text.
         user_phonemes_list = ml_models["g2p"](predicted_text)
         user_ipa = arpabet2ipa(" ".join(user_phonemes_list))
@@ -119,14 +119,14 @@ async def analyze(audio_file: UploadFile = File(...), target_ipa: str = Form(...
         # 5. MDD Logic
         # Làm sạch chuỗi target (bỏ dấu / và khoảng trắng thừa)
         clean_target = target_ipa.replace("/", "").strip()
-        
+
         # results nên là list các tuple: (target, user, status)
         results = align_phonemes(clean_target, user_ipa)
 
         # 6. Tính điểm dựa trên số âm vị đúng
         target_tokens = [t for t, u, s in results if t != "-"]
         correct_count = sum(1 for t, u, s in results if s == "Correct")
-        
+
         total_phonemes = len(target_tokens)
         score = (correct_count / total_phonemes * 100) if total_phonemes > 0 else 0
 
