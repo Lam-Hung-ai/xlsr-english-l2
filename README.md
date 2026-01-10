@@ -51,3 +51,10 @@ Code: copy từng ô trong file [gg_colab_fintune.ipynb](./gg_colab_finetune.ipy
 Tải github repo https://github.com/KoelLabs/ML.git
 copy file [eval.ipynb](./eval.ipynb) vào thưc mục ML-main/scripts/eval, chú ý thay đổi tên model cho đúng  
 Sau đó chạy tất cả (lưu ý cần phải tải đầy đủ thư viện)
+
+## Hướng dẫn chạy web
+Cần tải trước ffmpeg trên máy tính
+Chạy server
+```bash
+fastapi run main.py     # http://localhost:8000/
+```

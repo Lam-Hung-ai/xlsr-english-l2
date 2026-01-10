@@ -18,7 +18,7 @@ try:
 except ImportError:
     raise ImportError("Hãy kiểm tra lại cách bạn đặt file core.py hoặc thư mục core!")
 
-MODEL_ID = "KoelLabs/xlsr-english-01"
+MODEL_ID = "Lam-Hung/xlsr-english-l2"
 SAMPLING_RATE = 16000
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
